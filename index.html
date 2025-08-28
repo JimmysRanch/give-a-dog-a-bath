@@ -57,25 +57,13 @@
       border: 3px solid #333;
       border-radius: 10px;
       overflow: hidden;
-      /* Country landscape: sky above and farmland stripes below. Two layered
-         gradients provide a blue sky and green fields. The second gradient
-         creates repeating stripes to suggest rows of crops. The background
-         position will be updated dynamically in the script to move the
-         pattern left or right in sync with the dog's movement. */
-      background-image:
-        /* Top layer: sky and ground */
-        linear-gradient(to bottom, #87ceeb 0%, #87ceeb 50%, #a3d977 50%, #a3d977 100%),
-        /* Second layer: repeating stripes to suggest crop rows. Adjust the colours
-           and stripe widths to make the crop rows more distinct against the
-           field colour. */
-        repeating-linear-gradient(90deg, #c8e6a0 0 30px, #90c060 30px 60px);
-      /* Repeat the stripes horizontally across the width. The first gradient
-         repeats along the x‑axis to allow background scrolling, while the
-         second gradient repeats both directions. */
-      background-repeat: repeat-x, repeat;
-      /* Set the second gradient to a fixed stripe width to create distinct
-         crop rows. */
-      background-size: auto 100%, 200px 100%;
+      /* Use a repeating farm landscape image as the background. The image
+         scrolls horizontally as the dog moves to give the impression of
+         travelling through a countryside. Ensure the image spans the full
+         height of the game area and repeats along the x-axis. */
+      background-image: url('farm_background.png');
+      background-repeat: repeat-x;
+      background-size: auto 100%;
     }
     /* Dog */
     #dog {
@@ -207,8 +195,9 @@
       <div id="gameOverText"></div>
       <button id="restartBtn">Restart</button>
     </div>
-    <!-- Dog image -->
-    <img id="dog" src="dog.png" alt="Dog">
+    <!-- Dog image. Use the idle frame as the initial source so the dog
+         appears consistent before the game starts. -->
+    <img id="dog" src="dog_run2_final.png" alt="Dog">
   </div>
   <script>
     (function() {
@@ -277,8 +266,16 @@
       // running frames.
       let runAnimationInterval = null;
       let facingLeft = false;
-      const idleSrc = 'dog.png';
-      const runSrc = 'dog_run1.png';
+      /*
+       * Running animation frames. To keep the dog consistent between idle and
+       * running states we use two frames derived from the same art style.
+       * idleSrc points to the first frame, while runFrames contains both
+       * frames used when the dog is moving. runFrameIndex tracks the current
+       * frame.
+       */
+      const idleSrc = 'dog_run2_final.png';
+      const runFrames = ['dog_run2_final.png', 'dog_run1_final.png'];
+      let runFrameIndex = 0;
 
       // Movement state for left and right arrow keys. We track whether
       // each arrow key is currently pressed so we can determine the
@@ -506,14 +503,15 @@
        * the call has no effect.
        */
       function startRunAnimation() {
+        // If an animation is already running, do nothing. Otherwise start
+        // cycling through the runFrames array. Each tick advances the
+        // runFrameIndex and updates the dog's src accordingly. The idle
+        // frame serves as the first element in the array so there is no
+        // abrupt change when the dog starts moving.
         if (runAnimationInterval) return;
         runAnimationInterval = setInterval(() => {
-          // Toggle between running and idle images
-          if (dog.src.includes(runSrc)) {
-            dog.src = idleSrc;
-          } else {
-            dog.src = runSrc;
-          }
+          runFrameIndex = (runFrameIndex + 1) % runFrames.length;
+          dog.src = runFrames[runFrameIndex];
         }, 200);
       }
 
@@ -523,9 +521,14 @@
        * no‑op.
        */
       function stopRunAnimation() {
+        // Stop the running animation and reset the dog's image back to
+        // the idle frame. This clears the interval and resets the
+        // runFrameIndex so the next time the animation starts it will
+        // begin from the idle frame.
         if (!runAnimationInterval) return;
         clearInterval(runAnimationInterval);
         runAnimationInterval = null;
+        runFrameIndex = 0;
         dog.src = idleSrc;
       }
 
@@ -560,7 +563,11 @@
       function jump() {
         if (isJumping) return;
         isJumping = true;
-        // play jump sound
+        // play jump sound exactly once per jump. Reset the audio to
+        // the beginning and ensure it is not already playing before
+        // starting playback. This prevents multiple barks from
+        // overlapping if the button is pressed repeatedly.
+        jumpSound.pause();
         jumpSound.currentTime = 0;
         jumpSound.play();
         const start = Date.now();
