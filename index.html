@@ -177,44 +177,52 @@
        visible without obscuring the play field. */
     /* Cluster of left/right movement buttons. Positioned on the bottom
        right of the game area. Hidden until the game starts. */
-    #controls {
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
-      display: none; /* Hide until game start */
-      gap: 30px;
-      z-index: 15;
-    }
-    #controls button {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(255, 255, 255, 0.8);
-      font-size: 2rem;
-      line-height: 1;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    /* Jump button. Positioned on the bottom left of the game area.
-       Hidden until the game starts. */
-    #jumpBtn {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      width: 60px;
-      height: 60px;
-      border: none;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.8);
-      font-size: 2rem;
-      line-height: 1;
-      cursor: pointer;
-      user-select: none;
-      display: none; /* Hide until game start */
-      z-index: 15;
-    }
+         /* Container for the on‑screen controls. Placed below the game area so
+            the buttons no longer overlay the playfield. Hidden until the game
+            starts. */
+         #controlContainer {
+           /* Hide the control container until the game starts. We only set
+              display:flex in the startGame() function when we want the
+              controls to appear. If we declare display:flex here as
+              well as display:none, the latter will be overridden and the
+              container will remain visible on page load. */
+           display: none;
+           width: 100%;
+           margin-top: 10px;
+           justify-content: space-between;
+           padding: 0 10px;
+           box-sizing: border-box;
+         }
+         /* On‑screen movement buttons (cluster on right side within controlContainer) */
+         #controls {
+           display: flex;
+           gap: 30px;
+         }
+         #controls button {
+           width: 60px;
+           height: 60px;
+           border-radius: 50%;
+           border: none;
+           background: rgba(255, 255, 255, 0.8);
+           font-size: 2rem;
+           line-height: 1;
+           cursor: pointer;
+           user-select: none;
+         }
+         /* Jump button styling. The button is inside controlContainer on the
+            left side. It is hidden until the game starts. */
+         #jumpBtn {
+           width: 60px;
+           height: 60px;
+           border: none;
+           border-radius: 50%;
+           background: rgba(255, 255, 255, 0.8);
+           font-size: 2rem;
+           line-height: 1;
+           cursor: pointer;
+           user-select: none;
+           display: none; /* Hide until game start */
+         }
   </style>
 </head>
 <body>
@@ -229,8 +237,8 @@
     <div id="instructionOverlay">
       <h2>Give A Dog A Bath</h2>
       <p>
-        Use the ← and → arrow keys on a keyboard, tap the left or right side of the screen, or use the on‑screen left and right buttons at the bottom to move the dog at your own pace.<br>
-        Tap anywhere in the game area, press space/↑, or tap the Jump button on the bottom left to make the dog jump.<br>
+        Use the ← and → arrow keys on a keyboard or the on‑screen left and right buttons at the bottom to move the dog at your own pace.<br>
+        Tap anywhere in the game area, press Space/↑, or tap the Jump button on the bottom left to make the dog jump.<br>
         Avoid sprinklers, pools, hoses and fire trucks – those are water!<br>
         Hit mud puddles to grow bigger and jump higher. While muddy, hitting water will shrink you back to normal instead of ending the game. Hitting water when normal ends the game.
       </p>
@@ -245,10 +253,11 @@
          that the dog does not appear to grow or shrink when toggling between
          running frames. -->
     <img id="dog" src="dog_run2_uniform.png" alt="Dog">
-    <!-- On‑screen controls. The left/right buttons are grouped on the right side
-         and the jump button is positioned on the left. These are hidden
-         behind the instruction overlay until the game starts and will
-         appear at the bottom of the play area. -->
+    <!-- On‑screen controls have been moved outside the game area -->
+  </div>
+  <!-- Container for the on‑screen controls. This will be placed below the game area
+       and holds the jump button on the left and the movement buttons on the right. -->
+  <div id="controlContainer">
     <button id="jumpBtn" aria-label="Jump">↑</button>
     <div id="controls">
       <button id="leftBtn" aria-label="Move Left">←</button>
@@ -273,6 +282,10 @@
       const rightBtn = document.getElementById('rightBtn');
       const controls = document.getElementById('controls');
       const jumpBtn = document.getElementById('jumpBtn');
+      // Container that holds both the jump button and movement buttons. This
+      // element lives below the game area and is shown/hidden when the
+      // game starts or ends.
+      const controlContainer = document.getElementById('controlContainer');
 
       function handleLeftStart() {
         moveState.left = true;
@@ -354,12 +367,14 @@
         if (!gameRunning || instructionOverlay.style.display !== 'none') {
           return;
         }
+        // Prevent default to avoid click events after touchend. Trigger a jump when
+        // the player touches the screen if not already jumping. We no longer
+        // call handleTouchDirection here, as moving left/right by tapping the
+        // screen edges has been removed.
         e.preventDefault();
-        // Trigger a jump when the player touches the screen if not already jumping
         if (!isJumping) {
           jump();
         }
-        handleTouchDirection(e);
       }
 
       function handleTouchMove(e) {
@@ -369,8 +384,9 @@
         if (!gameRunning || instructionOverlay.style.display !== 'none') {
           return;
         }
+        // Prevent default to avoid unintended scrolling or clicks. Do not
+        // interpret touchmove as horizontal movement any more.
         e.preventDefault();
-        handleTouchDirection(e);
       }
 
       function handleTouchEnd(e) {
@@ -380,11 +396,10 @@
         if (!gameRunning || instructionOverlay.style.display !== 'none') {
           return;
         }
+        // Prevent default to avoid generating a mouse event after touchend. We no
+        // longer update movement state here because screen touches do not
+        // control horizontal movement.
         e.preventDefault();
-        // Stop horizontal movement when all touches are released
-        moveState.left = false;
-        moveState.right = false;
-        updateHorizontalVelocity();
       }
 
       gameArea.addEventListener('touchstart', handleTouchStart, {passive: false});
@@ -520,10 +535,10 @@
         stopRunAnimation();
         // Apply the correct transform (scale and orientation)
         updateDogTransform();
-        // Show on-screen controls and jump button on game start. These
-        // buttons provide clear targets on touch devices so players can
-        // move left/right or jump without relying solely on half-screen
-        // taps. We reveal them once the instructions have been dismissed.
+        // Show the on-screen control container and its buttons on game start. This
+        // container holds the jump button on the left and the movement buttons on
+        // the right.
+        if (controlContainer) controlContainer.style.display = 'flex';
         if (controls) controls.style.display = 'flex';
         if (jumpBtn) jumpBtn.style.display = 'block';
         // Start loop
@@ -799,7 +814,8 @@
         collisionSound.play();
         overlay.style.display = 'flex';
         gameOverText.textContent = 'Game Over! Your score: ' + Math.floor(score);
-        // Hide controls and jump button when the game ends so accidental taps don’t trigger movement
+        // Hide the control container and its buttons when the game ends so accidental taps don’t trigger movement
+        if (controlContainer) controlContainer.style.display = 'none';
         if (controls) controls.style.display = 'none';
         if (jumpBtn) jumpBtn.style.display = 'none';
       }
