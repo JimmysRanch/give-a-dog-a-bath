@@ -34,8 +34,8 @@
       position: absolute;
       bottom: 10px;
       left: 60px;
-      font-size: 3rem;
-      line-height: 1;
+      width: 80px;
+      height: auto;
       transition: bottom 0.1s;
       user-select: none;
     }
@@ -44,56 +44,32 @@
       position: absolute;
       bottom: 10px;
     }
+    /* Override default obstacle styles to remove backgrounds */
+    .sprinkler,
+    .pool,
+    .hose,
+    .truck {
+      background: none;
+      position: absolute;
+      bottom: 10px;
+      object-fit: contain;
+    }
+    /* Set sizes for each obstacle image */
     .sprinkler {
-      width: 30px;
-      height: 90px;
-      background: repeating-linear-gradient(
-        to top,
-        rgba(0, 150, 255, 0.8) 0%,
-        rgba(0, 200, 255, 0.8) 10%,
-        rgba(255, 255, 255, 0.8) 20%
-      );
-      border-radius: 10px 10px 0 0;
+      width: 80px;
+      height: 80px;
     }
     .pool {
-      width: 160px;
-      height: 25px;
-      background: rgba(0, 100, 255, 0.9);
-      border-radius: 5px;
+      width: 150px;
+      height: 50px;
     }
     .hose {
-      width: 50px;
-      height: 70px;
-      background: repeating-linear-gradient(
-        135deg,
-        rgba(0, 180, 255, 0.8) 0%,
-        rgba(0, 220, 255, 0.8) 20%,
-        rgba(255, 255, 255, 0.8) 40%
-      );
-      border-radius: 5px;
-      transform: rotate(-20deg);
+      width: 120px;
+      height: 120px;
     }
     .truck {
-      width: 120px;
-      height: 50px;
-      background: #888;
-      border-radius: 5px;
-      /* Add water jet above truck */
-    }
-    .truck::after {
-      content: '';
-      position: absolute;
-      top: -30px;
-      left: 10px;
-      width: 100px;
-      height: 30px;
-      background: repeating-linear-gradient(
-        to top,
-        rgba(0, 150, 255, 0.8) 0%,
-        rgba(0, 200, 255, 0.8) 20%,
-        rgba(255, 255, 255, 0.8) 40%
-      );
-      border-radius: 0 0 10px 10px;
+      width: 160px;
+      height: 90px;
     }
     #overlay {
       position: absolute;
@@ -119,16 +95,61 @@
       background: #ff8b94;
       border-radius: 5px;
     }
+
+    /* Instruction overlay */
+    #instructionOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: #fff;
+      z-index: 20;
+    }
+    #instructionOverlay h2 {
+      margin: 0;
+      font-size: 2rem;
+    }
+    #instructionOverlay p {
+      margin: 10px 0;
+      font-size: 1.1rem;
+      text-align: center;
+      line-height: 1.4;
+    }
+    #instructionOverlay button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 1.2rem;
+      cursor: pointer;
+      border: none;
+      background: #ff8b94;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
   <div id="score">Score: 0</div>
   <div id="gameArea">
+    <!-- Instruction overlay shown at the start -->
+    <div id="instructionOverlay">
+      <h2>Give A Dog A Bath</h2>
+      <p>Tap or press space to make the dog jump.<br>
+      Avoid the sprinklers, puddles, hoses and fire trucks!<br>
+      The dog gets faster over time!</p>
+      <button id="startBtn">Start</button>
+    </div>
+    <!-- Game over overlay -->
     <div id="overlay">
       <div id="gameOverText"></div>
       <button id="restartBtn">Restart</button>
     </div>
-    <div id="dog">🐶</div>
+    <!-- Dog image -->
+    <img id="dog" src="dog.png" alt="Dog">
   </div>
   <script>
     (function() {
@@ -138,6 +159,11 @@
       const overlay = document.getElementById('overlay');
       const gameOverText = document.getElementById('gameOverText');
       const restartBtn = document.getElementById('restartBtn');
+      const instructionOverlay = document.getElementById('instructionOverlay');
+      const startBtn = document.getElementById('startBtn');
+      // Sounds
+      const jumpSound = new Audio('beep-01a.mp3');
+      const collisionSound = new Audio('beep-01a.mp3');
       let obstacles = [];
       let lastSpawnTime = 0;
       let spawnInterval = 1800; // ms
@@ -168,14 +194,21 @@
       function createObstacle() {
         const types = ['sprinkler', 'pool', 'hose', 'truck'];
         const type = types[Math.floor(Math.random() * types.length)];
-        const ob = document.createElement('div');
+        let ob;
+        // create image-based obstacle for each type
+        ob = document.createElement('img');
+        if (type === 'sprinkler') {
+          ob.src = 'sprinkler.png';
+        } else if (type === 'pool') {
+          ob.src = 'puddle.png';
+        } else if (type === 'hose') {
+          ob.src = 'hose.png';
+        } else if (type === 'truck') {
+          ob.src = 'firetruck.png';
+        }
         ob.classList.add('obstacle', type);
         // set starting left position
         ob.style.left = gameArea.offsetWidth + 'px';
-        // different heights for some obstacles
-        if (type === 'truck') {
-          ob.style.bottom = '10px';
-        }
         gameArea.appendChild(ob);
         obstacles.push(ob);
       }
@@ -235,6 +268,9 @@
       function jump() {
         if (isJumping) return;
         isJumping = true;
+        // play jump sound
+        jumpSound.currentTime = 0;
+        jumpSound.play();
         const start = Date.now();
         const startBottom = parseFloat(window.getComputedStyle(dog).bottom);
         const jumpHeight = 150;
@@ -259,6 +295,9 @@
 
       function endGame() {
         gameRunning = false;
+        // play collision sound
+        collisionSound.currentTime = 0;
+        collisionSound.play();
         overlay.style.display = 'flex';
         gameOverText.textContent = 'Game Over! Your score: ' + Math.floor(score);
       }
@@ -273,10 +312,17 @@
       gameArea.addEventListener('touchstart', () => jump(), {passive: true});
 
       restartBtn.addEventListener('click', () => {
+        overlay.style.display = 'none';
         startGame();
       });
 
-      startGame();
+      // Start button for initial instructions
+      startBtn.addEventListener('click', () => {
+        instructionOverlay.style.display = 'none';
+        startGame();
+      });
+
+      // Do not auto-start; waiting for user to press Start
     })();
   </script>
 </body>
