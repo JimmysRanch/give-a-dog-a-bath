@@ -138,9 +138,9 @@
     <!-- Instruction overlay shown at the start -->
     <div id="instructionOverlay">
       <h2>Give A Dog A Bath</h2>
-      <p>Tap or press space to make the dog jump.<br>
-      Avoid the sprinklers, puddles, hoses and fire trucks!<br>
-      The dog gets faster over time!</p>
+      <p>Use the ← and → arrow keys to move the dog left or right at your own pace.<br>
+      Tap or press space/↑ to make the dog jump.<br>
+      Avoid the sprinklers, puddles, hoses and fire trucks!</p>
       <button id="startBtn">Start</button>
     </div>
     <!-- Game over overlay -->
@@ -165,9 +165,17 @@
       const jumpSound = new Audio('beep-01a.mp3');
       const collisionSound = new Audio('beep-01a.mp3');
       let obstacles = [];
-      let lastSpawnTime = 0;
-      let spawnInterval = 1800; // ms
-      let speed = 4;
+      // Horizontal movement: dog's velocity (pixels per frame) and world offset.
+      let dogVelocityX = 0;
+      let worldOffset = 0;
+      // Spawn obstacles based on distance travelled: distance since last spawn,
+      // current spawn distance threshold, minimum spawn distance, and decrease step.
+      let distanceSinceLastSpawn = 0;
+      let spawnDistance = 500;
+      const minSpawnDistance = 200;
+      const spawnDecreaseStep = 10;
+      // Variables lastSpawnTime, spawnInterval and speed are removed since obstacles
+      // are now spawned based on distance travelled rather than elapsed time.
       let score = 0;
       let gameRunning = false;
       let isJumping = false;
@@ -178,13 +186,39 @@
       // always start and end its jump at this baseline.
       const ground = 10;
 
+      // Movement state for left and right arrow keys. We track whether
+      // each arrow key is currently pressed so we can determine the
+      // dog's horizontal velocity. This allows for smooth transitions
+      // when multiple keys are pressed or released.
+      const moveState = { left: false, right: false };
+      // The horizontal movement speed (in pixels per frame). Feel free
+      // to tweak this value to adjust how quickly the dog moves across
+      // the screen and the world scrolls.
+      const horizontalSpeed = 8;
+
+      // Helper to update the dog's horizontal velocity based on which
+      // arrow keys are currently pressed. Right arrow sets a positive
+      // velocity, left arrow sets a negative velocity, and if neither
+      // arrow (or both) are pressed, the velocity is zero.
+      function updateHorizontalVelocity() {
+        if (moveState.right && !moveState.left) {
+          dogVelocityX = horizontalSpeed;
+        } else if (moveState.left && !moveState.right) {
+          dogVelocityX = -horizontalSpeed;
+        } else {
+          dogVelocityX = 0;
+        }
+      }
+
       function startGame() {
         // reset game
         obstacles.forEach(o => o.remove());
         obstacles = [];
-        lastSpawnTime = 0;
-        spawnInterval = 1800;
-        speed = 4;
+        // Reset world and horizontal movement state
+        worldOffset = 0;
+        dogVelocityX = 0;
+        distanceSinceLastSpawn = 0;
+        spawnDistance = 500;
         score = 0;
         scoreEl.textContent = 'Score: 0';
         gameRunning = true;
@@ -212,8 +246,11 @@
           ob.src = 'firetruck.png';
         }
         ob.classList.add('obstacle', type);
-        // set starting left position
-        ob.style.left = gameArea.offsetWidth + 'px';
+        // Assign a world coordinate ahead of the current view. Add a random gap so obstacles are not evenly spaced.
+        const gap = Math.random() * 200 + 200;
+        // Place the obstacle just beyond the right edge of the visible area.
+        ob.worldX = worldOffset + gameArea.offsetWidth + gap;
+        ob.style.left = (ob.worldX - worldOffset) + 'px';
         gameArea.appendChild(ob);
         obstacles.push(ob);
       }
@@ -222,35 +259,42 @@
         if (!gameRunning) return;
         const delta = time - lastTime;
         lastTime = time;
-        // spawn obstacles
-        if (time - lastSpawnTime > spawnInterval) {
-          createObstacle();
-          lastSpawnTime = time;
-          if (spawnInterval > 800) {
-            spawnInterval -= 20; // gradually decrease interval
-          }
+        // Update world offset based on dog's horizontal velocity. Use delta to make movement frame rate independent.
+        worldOffset += dogVelocityX * (delta / 16);
+        if (worldOffset < 0) worldOffset = 0;
+        // Accumulate distance travelled to determine when to spawn the next obstacle.
+        if (dogVelocityX > 0) {
+          distanceSinceLastSpawn += dogVelocityX * (delta / 16);
         }
-        // move obstacles and check collisions
+        // Update obstacles positions relative to worldOffset, remove off-screen and check collisions.
         for (let i = obstacles.length - 1; i >= 0; i--) {
           const ob = obstacles[i];
-          const currentLeft = parseFloat(ob.style.left);
-          ob.style.left = (currentLeft - speed) + 'px';
-          // remove if off screen
-          if (currentLeft + ob.offsetWidth < 0) {
+          // Calculate new screen left based on world coordinate and worldOffset
+          const screenLeft = ob.worldX - worldOffset;
+          ob.style.left = screenLeft + 'px';
+          // Remove if off screen to the left
+          if (screenLeft + ob.offsetWidth < 0) {
             ob.remove();
             obstacles.splice(i, 1);
             continue;
           }
-          // collision detection
+          // Collision detection
           if (isColliding(dog, ob)) {
             endGame();
             return;
           }
         }
-        // increase speed gradually
-        speed += 0.003;
-        // increase score
-        score += delta * 0.01;
+        // Spawn a new obstacle if enough distance has been travelled
+        if (distanceSinceLastSpawn > spawnDistance) {
+          createObstacle();
+          distanceSinceLastSpawn = 0;
+          // Gradually decrease the spawn distance down to a minimum to ramp difficulty.
+          if (spawnDistance > minSpawnDistance) {
+            spawnDistance -= spawnDecreaseStep;
+          }
+        }
+        // Increase score based on distance travelled (both directions contribute)
+        score += Math.abs(dogVelocityX) * (delta / 16) * 0.1;
         scoreEl.textContent = 'Score: ' + Math.floor(score);
         requestAnimationFrame(update);
       }
@@ -315,6 +359,21 @@
       document.addEventListener('keydown', (e) => {
         if (e.code === 'Space' || e.code === 'ArrowUp') {
           jump();
+        } else if (e.code === 'ArrowLeft') {
+          moveState.left = true;
+          updateHorizontalVelocity();
+        } else if (e.code === 'ArrowRight') {
+          moveState.right = true;
+          updateHorizontalVelocity();
+        }
+      });
+      document.addEventListener('keyup', (e) => {
+        if (e.code === 'ArrowLeft') {
+          moveState.left = false;
+          updateHorizontalVelocity();
+        } else if (e.code === 'ArrowRight') {
+          moveState.right = false;
+          updateHorizontalVelocity();
         }
       });
       gameArea.addEventListener('click', () => jump());
