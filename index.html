@@ -349,6 +349,11 @@
       }
 
       function handleTouchStart(e) {
+        // If the game is not running or the instruction overlay is still visible,
+        // ignore touches so that the Start button and other UI elements remain clickable.
+        if (!gameRunning || instructionOverlay.style.display !== 'none') {
+          return;
+        }
         e.preventDefault();
         // Trigger a jump when the player touches the screen if not already jumping
         if (!isJumping) {
@@ -358,11 +363,23 @@
       }
 
       function handleTouchMove(e) {
+        // Ignore touchmove events when the game is not running or the instruction overlay
+        // is visible. This prevents the movement handler from firing while the player
+        // is attempting to press the Start button or other UI elements.
+        if (!gameRunning || instructionOverlay.style.display !== 'none') {
+          return;
+        }
         e.preventDefault();
         handleTouchDirection(e);
       }
 
       function handleTouchEnd(e) {
+        // Ignore touchend events when the game is not running or the instruction overlay
+        // is visible. This ensures that releasing a touch over the Start button does not
+        // inadvertently reset movement state or prevent the button from being clicked.
+        if (!gameRunning || instructionOverlay.style.display !== 'none') {
+          return;
+        }
         e.preventDefault();
         // Stop horizontal movement when all touches are released
         moveState.left = false;
