@@ -209,7 +209,7 @@
     <div id="instructionOverlay">
       <h2>Give A Dog A Bath</h2>
       <p>
-        Use the ← and → arrow keys on a keyboard or tap the on‑screen arrows to move the dog left or right at your own pace.<br>
+        Use the ← and → arrow keys on a keyboard or tap the left or right side of the screen on a touch device to move the dog left or right at your own pace.<br>
         Tap anywhere in the game area or press space/↑ to make the dog jump.<br>
         Avoid sprinklers, pools, hoses and fire trucks – those are water!<br>
         Hit mud puddles to grow bigger and jump higher. While muddy, hitting water will shrink you back to normal instead of ending the game. Hitting water when normal ends the game.
@@ -285,6 +285,55 @@
         rightBtn.addEventListener('mouseup', handleRightEnd);
         rightBtn.addEventListener('mouseleave', handleRightEnd);
       }
+
+      // Touch controls: tap the left or right half of the game area to
+      // move the dog left or right on touch devices. Each touch start
+      // will also trigger a jump if the dog is not already jumping, so
+      // that a quick tap will both jump and move. Movement stops when
+      // the touch ends. We prevent default behaviour on these events to
+      // avoid the click event firing after touchend. These listeners are
+      // passive false so we can call preventDefault().
+      function handleTouchDirection(e) {
+        const touch = e.touches && e.touches[0];
+        if (!touch) return;
+        const rect = gameArea.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        // Determine which side of the game area the touch is in
+        if (x < rect.width / 2) {
+          moveState.left = true;
+          moveState.right = false;
+        } else {
+          moveState.right = true;
+          moveState.left = false;
+        }
+        updateHorizontalVelocity();
+      }
+
+      function handleTouchStart(e) {
+        e.preventDefault();
+        // Trigger a jump when the player touches the screen if not already jumping
+        if (!isJumping) {
+          jump();
+        }
+        handleTouchDirection(e);
+      }
+
+      function handleTouchMove(e) {
+        e.preventDefault();
+        handleTouchDirection(e);
+      }
+
+      function handleTouchEnd(e) {
+        e.preventDefault();
+        // Stop horizontal movement when all touches are released
+        moveState.left = false;
+        moveState.right = false;
+        updateHorizontalVelocity();
+      }
+
+      gameArea.addEventListener('touchstart', handleTouchStart, {passive: false});
+      gameArea.addEventListener('touchmove', handleTouchMove, {passive: false});
+      gameArea.addEventListener('touchend', handleTouchEnd, {passive: false});
       // Sounds
       // Use bark.mp3 for the jump sound. This file should be replaced
       // with an actual bark sound (or any preferred sound) once the user
@@ -415,8 +464,10 @@
         stopRunAnimation();
         // Apply the correct transform (scale and orientation)
         updateDogTransform();
-        // Show on‑screen controls now that the game has started
-        if (controls) controls.style.display = 'flex';
+        // We no longer rely on dedicated on‑screen arrow buttons. Movement
+        // on touch devices is handled by tapping the left or right side
+        // of the game area. Therefore, we intentionally do not reveal
+        // the controls element here.
         // Start loop
         lastTime = performance.now();
         requestAnimationFrame(update);
