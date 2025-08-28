@@ -175,12 +175,13 @@
        iPhones. They are positioned at the bottom centre of the game
        area and styled with semi‑transparent backgrounds so they are
        visible without obscuring the play field. */
+    /* Cluster of left/right movement buttons. Positioned on the bottom
+       right of the game area. Hidden until the game starts. */
     #controls {
       position: absolute;
       bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: none; /* Hide controls until the game starts */
+      right: 10px;
+      display: none; /* Hide until game start */
       gap: 30px;
       z-index: 15;
     }
@@ -194,6 +195,25 @@
       line-height: 1;
       cursor: pointer;
       user-select: none;
+    }
+
+    /* Jump button. Positioned on the bottom left of the game area.
+       Hidden until the game starts. */
+    #jumpBtn {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      width: 60px;
+      height: 60px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.8);
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      display: none; /* Hide until game start */
+      z-index: 15;
     }
   </style>
 </head>
@@ -209,8 +229,8 @@
     <div id="instructionOverlay">
       <h2>Give A Dog A Bath</h2>
       <p>
-        Use the ← and → arrow keys on a keyboard or tap the left or right side of the screen on a touch device to move the dog left or right at your own pace.<br>
-        Tap anywhere in the game area or press space/↑ to make the dog jump.<br>
+        Use the ← and → arrow keys on a keyboard, tap the left or right side of the screen, or use the on‑screen left and right buttons at the bottom to move the dog at your own pace.<br>
+        Tap anywhere in the game area, press space/↑, or tap the Jump button on the bottom left to make the dog jump.<br>
         Avoid sprinklers, pools, hoses and fire trucks – those are water!<br>
         Hit mud puddles to grow bigger and jump higher. While muddy, hitting water will shrink you back to normal instead of ending the game. Hitting water when normal ends the game.
       </p>
@@ -225,13 +245,14 @@
          that the dog does not appear to grow or shrink when toggling between
          running frames. -->
     <img id="dog" src="dog_run2_uniform.png" alt="Dog">
-    <!-- On‑screen arrow controls for touch devices. Each button sets the
-         horizontal movement state when pressed and released. These controls
-         will only be visible during gameplay and are hidden behind the
-         instruction overlay until the game starts. -->
+    <!-- On‑screen controls. The left/right buttons are grouped on the right side
+         and the jump button is positioned on the left. These are hidden
+         behind the instruction overlay until the game starts and will
+         appear at the bottom of the play area. -->
+    <button id="jumpBtn" aria-label="Jump">↑</button>
     <div id="controls">
-      <button id="leftBtn">←</button>
-      <button id="rightBtn">→</button>
+      <button id="leftBtn" aria-label="Move Left">←</button>
+      <button id="rightBtn" aria-label="Move Right">→</button>
     </div>
   </div>
   <script>
@@ -251,6 +272,7 @@
       const leftBtn = document.getElementById('leftBtn');
       const rightBtn = document.getElementById('rightBtn');
       const controls = document.getElementById('controls');
+      const jumpBtn = document.getElementById('jumpBtn');
 
       function handleLeftStart() {
         moveState.left = true;
@@ -268,6 +290,16 @@
         moveState.right = false;
         updateHorizontalVelocity();
       }
+
+      // Handle jump button presses. When the jump button is pressed (either
+      // via touch or mouse down) the dog will jump once if not already
+      // jumping. The event is prevented to avoid triggering click events.
+      function handleJumpPress(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!isJumping) {
+          jump();
+        }
+      }
       // Attach event listeners for touch and mouse interactions on the
       // on‑screen buttons. Prevent default on touch events to avoid
       // interfering with the game scroll or other gestures. Use
@@ -284,6 +316,13 @@
         rightBtn.addEventListener('mousedown', handleRightStart);
         rightBtn.addEventListener('mouseup', handleRightEnd);
         rightBtn.addEventListener('mouseleave', handleRightEnd);
+      }
+
+      // Attach jump button event listeners if present. Use touchstart and
+      // mousedown to initiate a jump immediately on press.
+      if (jumpBtn) {
+        jumpBtn.addEventListener('touchstart', (e) => { handleJumpPress(e); }, {passive: false});
+        jumpBtn.addEventListener('mousedown', (e) => { handleJumpPress(e); });
       }
 
       // Touch controls: tap the left or right half of the game area to
@@ -335,11 +374,11 @@
       gameArea.addEventListener('touchmove', handleTouchMove, {passive: false});
       gameArea.addEventListener('touchend', handleTouchEnd, {passive: false});
       // Sounds
-      // Use bark.mp3 for the jump sound. This file should be replaced
-      // with an actual bark sound (or any preferred sound) once the user
-      // uploads it to the repository. The collision sound can remain the
-      // beep for now, or be replaced similarly.
-      const jumpSound = new Audio('bark.mp3');
+      // Use jump.wav for the jump sound. This is a short pleasant tone
+      // played once per jump. You can replace this file with any other
+      // sound by uploading a new file to the repository and changing
+      // the filename here. The collision sound remains the beep for now.
+      const jumpSound = new Audio('jump.wav');
       const collisionSound = new Audio('beep-01a.mp3');
       let obstacles = [];
       // Muddy state: when the dog hits a mud puddle it becomes muddy, grows
@@ -464,10 +503,12 @@
         stopRunAnimation();
         // Apply the correct transform (scale and orientation)
         updateDogTransform();
-        // We no longer rely on dedicated on‑screen arrow buttons. Movement
-        // on touch devices is handled by tapping the left or right side
-        // of the game area. Therefore, we intentionally do not reveal
-        // the controls element here.
+        // Show on-screen controls and jump button on game start. These
+        // buttons provide clear targets on touch devices so players can
+        // move left/right or jump without relying solely on half-screen
+        // taps. We reveal them once the instructions have been dismissed.
+        if (controls) controls.style.display = 'flex';
+        if (jumpBtn) jumpBtn.style.display = 'block';
         // Start loop
         lastTime = performance.now();
         requestAnimationFrame(update);
@@ -741,8 +782,9 @@
         collisionSound.play();
         overlay.style.display = 'flex';
         gameOverText.textContent = 'Game Over! Your score: ' + Math.floor(score);
-        // Hide controls when the game ends so accidental taps don’t trigger movement
+        // Hide controls and jump button when the game ends so accidental taps don’t trigger movement
         if (controls) controls.style.display = 'none';
+        if (jumpBtn) jumpBtn.style.display = 'none';
       }
 
       // control events
