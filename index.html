@@ -195,9 +195,10 @@
       <div id="gameOverText"></div>
       <button id="restartBtn">Restart</button>
     </div>
-    <!-- Dog image. Use the idle frame as the initial source so the dog
-         appears consistent before the game starts. -->
-    <img id="dog" src="dog_run2_final.png" alt="Dog">
+    <!-- Dog image. Use a uniform-sized idle frame for the initial dog image.  This ensures
+         that the dog does not appear to grow or shrink when toggling between
+         running frames. -->
+    <img id="dog" src="dog_run2_uniform.png" alt="Dog">
   </div>
   <script>
     (function() {
@@ -273,8 +274,12 @@
        * frames used when the dog is moving. runFrameIndex tracks the current
        * frame.
        */
-      const idleSrc = 'dog_run2_final.png';
-      const runFrames = ['dog_run2_final.png', 'dog_run1_final.png'];
+      // Use uniform-sized frames for the idle and running images to prevent
+      // the dog from appearing to grow or shrink between frames. The
+      // images dog_run1_uniform.png and dog_run2_uniform.png are padded to
+      // the same dimensions.
+      const idleSrc = 'dog_run2_uniform.png';
+      const runFrames = ['dog_run2_uniform.png', 'dog_run1_uniform.png'];
       let runFrameIndex = 0;
 
       // Movement state for left and right arrow keys. We track whether
@@ -468,12 +473,16 @@
       function isColliding(a, b) {
         const rect1 = getRect(a);
         const rect2 = getRect(b);
-        return !(
-          rect1.right < rect2.left ||
-          rect1.left > rect2.right ||
-          rect1.bottom < rect2.top ||
-          rect1.top > rect2.bottom
-        );
+        // Use the dog's horizontal centre to determine overlap rather than its
+        // entire bounding box. This avoids premature collisions when the
+        // dog's tail or front overlaps the obstacle but its body hasn't yet
+        // reached the water. Only trigger a collision when the dog's centre
+        // lies within the obstacle's horizontal extent and its bottom is
+        // below the obstacle's top.
+        const centerX = rect1.left + rect1.width / 2;
+        const horizontallyAligned = centerX > rect2.left && centerX < rect2.right;
+        const verticallyAligned = rect1.bottom > rect2.top;
+        return horizontallyAligned && verticallyAligned;
       }
 
       /**
