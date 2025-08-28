@@ -19,6 +19,36 @@
       z-index: 10;
       color: #333;
     }
+    /* Game title displayed at the top centre */
+    #gameTitle {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 2rem;
+      font-weight: bold;
+      z-index: 10;
+      color: #333;
+      pointer-events: none;
+    }
+    /* Logo image positioned in the top‑right corner */
+    #logo {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 80px;
+      height: auto;
+      z-index: 10;
+    }
+    /* Mud puddle obstacle styling: a simple brown ellipse */
+    .mud {
+      width: 100px;
+      height: 30px;
+      background: #8B4513;
+      border-radius: 50%;
+      position: absolute;
+      bottom: 10px;
+    }
     #gameArea {
       position: relative;
       width: 100vw;
@@ -27,17 +57,38 @@
       border: 3px solid #333;
       border-radius: 10px;
       overflow: hidden;
-      background: linear-gradient(90deg, #ffecd2 0%, #fcb69f 100%);
+      /* Country landscape: sky above and farmland stripes below. Two layered
+         gradients provide a blue sky and green fields. The second gradient
+         creates repeating stripes to suggest rows of crops. The background
+         position will be updated dynamically in the script to move the
+         pattern left or right in sync with the dog's movement. */
+      background-image:
+        /* Top layer: sky and ground */
+        linear-gradient(to bottom, #87ceeb 0%, #87ceeb 50%, #a3d977 50%, #a3d977 100%),
+        /* Second layer: repeating stripes to suggest crop rows. Adjust the colours
+           and stripe widths to make the crop rows more distinct against the
+           field colour. */
+        repeating-linear-gradient(90deg, #c8e6a0 0 30px, #90c060 30px 60px);
+      /* Repeat the stripes horizontally across the width. The first gradient
+         repeats along the x‑axis to allow background scrolling, while the
+         second gradient repeats both directions. */
+      background-repeat: repeat-x, repeat;
+      /* Set the second gradient to a fixed stripe width to create distinct
+         crop rows. */
+      background-size: auto 100%, 200px 100%;
     }
     /* Dog */
     #dog {
       position: absolute;
-      bottom: 10px;
+      /* Place the dog right on the ground rather than hovering. */
+      bottom: 0;
       left: 60px;
       width: 80px;
       height: auto;
       transition: bottom 0.1s;
       user-select: none;
+      /* Disable pointer events so the dog doesn’t block clicks on the game area. */
+      pointer-events: none;
     }
     /* Obstacles */
     .obstacle {
@@ -133,14 +184,22 @@
   </style>
 </head>
 <body>
+  <!-- Game title centred at the top -->
+  <div id="gameTitle">Give A Dog A Bath</div>
+  <!-- Placeholder for Scruffy Butts logo. Replace logo.png with your own
+       logo file once uploaded to the repository. -->
+  <img id="logo" src="logo.png" alt="Scruffy Butts Logo">
   <div id="score">Score: 0</div>
   <div id="gameArea">
     <!-- Instruction overlay shown at the start -->
     <div id="instructionOverlay">
       <h2>Give A Dog A Bath</h2>
-      <p>Use the ← and → arrow keys to move the dog left or right at your own pace.<br>
-      Tap or press space/↑ to make the dog jump.<br>
-      Avoid the sprinklers, puddles, hoses and fire trucks!</p>
+      <p>
+        Use the ← and → arrow keys to move the dog left or right at your own pace.<br>
+        Tap or press space/↑ to make the dog jump.<br>
+        Avoid sprinklers, pools, hoses and fire trucks – those are water!<br>
+        Hit mud puddles to grow bigger and jump higher. While muddy, hitting water will shrink you back to normal instead of ending the game. Hitting water when normal ends the game.
+      </p>
       <button id="startBtn">Start</button>
     </div>
     <!-- Game over overlay -->
@@ -162,9 +221,21 @@
       const instructionOverlay = document.getElementById('instructionOverlay');
       const startBtn = document.getElementById('startBtn');
       // Sounds
-      const jumpSound = new Audio('beep-01a.mp3');
+      // Use bark.mp3 for the jump sound. This file should be replaced
+      // with an actual bark sound (or any preferred sound) once the user
+      // uploads it to the repository. The collision sound can remain the
+      // beep for now, or be replaced similarly.
+      const jumpSound = new Audio('bark.mp3');
       const collisionSound = new Audio('beep-01a.mp3');
       let obstacles = [];
+      // Muddy state: when the dog hits a mud puddle it becomes muddy, grows
+      // larger and can jump higher. While muddy, hitting water will shrink
+      // the dog back to normal instead of ending the game. These variables
+      // track the muddy status and the current jump height.
+      let isMuddy = false;
+      const normalJumpHeight = 150;
+      const mudJumpHeight = 300;
+      let currentJumpHeight = normalJumpHeight;
       // Horizontal movement: dog's velocity (pixels per frame) and world offset.
       let dogVelocityX = 0;
       let worldOffset = 0;
@@ -184,7 +255,9 @@
       // ground value prevents the dog from gradually floating upwards if
       // multiple jumps are triggered in quick succession. The dog will
       // always start and end its jump at this baseline.
-      const ground = 10;
+      // Define the ground level for the dog (in pixels). Set this to zero
+      // so the dog stands directly on the bottom edge of the game area.
+      const ground = 0;
 
       // Minimum vertical clearance (in pixels) needed for the dog to safely clear
       // an obstacle. If the dog's bottom position is below this value, then
@@ -195,6 +268,17 @@
       // different obstacles. A value around 80px works well with the
       // current obstacle heights (50–120px).
       const jumpClearance = 80;
+
+      // Animation state. When the dog moves horizontally we alternate
+      // between the idle and running images to give the impression of
+      // walking/running. runAnimationInterval holds the interval ID when
+      // active. facingLeft tracks the direction the dog is facing. The
+      // idleSrc and runSrc variables define the filenames for the idle and
+      // running frames.
+      let runAnimationInterval = null;
+      let facingLeft = false;
+      const idleSrc = 'dog.png';
+      const runSrc = 'dog_run1.png';
 
       // Movement state for left and right arrow keys. We track whether
       // each arrow key is currently pressed so we can determine the
@@ -218,6 +302,16 @@
         } else {
           dogVelocityX = 0;
         }
+        // Update facing direction based on velocity. When moving right the
+        // dog faces right; when moving left it faces left. If velocity is
+        // zero we leave the facing direction unchanged so the dog keeps
+        // looking the last direction it moved.
+        if (dogVelocityX > 0) {
+          facingLeft = false;
+        } else if (dogVelocityX < 0) {
+          facingLeft = true;
+        }
+        updateDogTransform();
       }
 
       function startGame() {
@@ -235,27 +329,45 @@
         overlay.style.display = 'none';
         // Reset dog position to the ground level
         dog.style.bottom = ground + 'px';
+        // Reset muddy status, orientation and animation state
+        isMuddy = false;
+        facingLeft = false;
+        currentJumpHeight = normalJumpHeight;
+        // Set the dog's default image and stop any running animation
+        dog.src = idleSrc;
+        stopRunAnimation();
+        // Apply the correct transform (scale and orientation)
+        updateDogTransform();
         // Start loop
         lastTime = performance.now();
         requestAnimationFrame(update);
       }
 
       function createObstacle() {
-        const types = ['sprinkler', 'pool', 'hose', 'truck'];
+        // Include mud puddles as an additional obstacle type. Water obstacles
+        // include sprinkler, pool, hose and truck. Mud obstacles use a
+        // simple div with brown colour defined in CSS.
+        const types = ['sprinkler', 'pool', 'hose', 'truck', 'mud'];
         const type = types[Math.floor(Math.random() * types.length)];
         let ob;
-        // create image-based obstacle for each type
-        ob = document.createElement('img');
-        if (type === 'sprinkler') {
-          ob.src = 'sprinkler.png';
-        } else if (type === 'pool') {
-          ob.src = 'puddle.png';
-        } else if (type === 'hose') {
-          ob.src = 'hose.png';
-        } else if (type === 'truck') {
-          ob.src = 'firetruck.png';
+        if (type === 'mud') {
+          // Create a simple div for mud puddle
+          ob = document.createElement('div');
+          ob.classList.add('obstacle', 'mud');
+        } else {
+          ob = document.createElement('img');
+          if (type === 'sprinkler') {
+            ob.src = 'sprinkler.png';
+          } else if (type === 'pool') {
+            ob.src = 'puddle.png';
+          } else if (type === 'hose') {
+            ob.src = 'hose.png';
+          } else if (type === 'truck') {
+            ob.src = 'firetruck.png';
+          }
+          ob.classList.add(type);
         }
-        ob.classList.add('obstacle', type);
+        ob.classList.add('obstacle');
         // Assign a world coordinate ahead of the current view. Add a random gap so obstacles are not evenly spaced.
         const gap = Math.random() * 200 + 200;
         // Place the obstacle just beyond the right edge of the visible area.
@@ -272,6 +384,17 @@
         // Update world offset based on dog's horizontal velocity. Use delta to make movement frame rate independent.
         worldOffset += dogVelocityX * (delta / 16);
         if (worldOffset < 0) worldOffset = 0;
+        // Update the background position so the country stripes scroll as the
+        // dog moves horizontally. A negative worldOffset moves the background
+        // to the left when the dog moves right and vice versa.
+        gameArea.style.backgroundPositionX = (-worldOffset) + 'px';
+
+        // Start or stop the running animation based on horizontal movement.
+        if (dogVelocityX !== 0 && !runAnimationInterval) {
+          startRunAnimation();
+        } else if (dogVelocityX === 0 && runAnimationInterval) {
+          stopRunAnimation();
+        }
         // Accumulate distance travelled to determine when to spawn the next obstacle.
         if (dogVelocityX > 0) {
           distanceSinceLastSpawn += dogVelocityX * (delta / 16);
@@ -296,6 +419,31 @@
           const dogBottomVal = parseFloat(dog.style.bottom);
           if (dogBottomVal < jumpClearance) {
             if (isColliding(dog, ob)) {
+              // Determine how to handle the collision based on obstacle type.
+              if (ob.classList.contains('mud')) {
+                // Mud puddle: become muddy and remove the puddle
+                getMuddy();
+                ob.remove();
+                obstacles.splice(i, 1);
+                continue;
+              }
+              // Check for water obstacles: sprinkler, pool, hose or truck
+              if (ob.classList.contains('sprinkler') ||
+                  ob.classList.contains('pool') ||
+                  ob.classList.contains('hose') ||
+                  ob.classList.contains('truck')) {
+                // Hitting water when muddy shrinks back to normal; otherwise game over
+                if (isMuddy) {
+                  hitWater();
+                  ob.remove();
+                  obstacles.splice(i, 1);
+                  continue;
+                } else {
+                  endGame();
+                  return;
+                }
+              }
+              // Any other obstacle type triggers game over
               endGame();
               return;
             }
@@ -331,6 +479,84 @@
         );
       }
 
+      /**
+       * Update the dog's CSS transform to reflect its current scale and
+       * facing direction. The dog grows larger when muddy and flips
+       * horizontally when facing left. We compose scale and flip into a
+       * single transform string. This helper should be called whenever
+       * isMuddy or facingLeft changes.
+       */
+      function updateDogTransform() {
+        const scaleFactor = isMuddy ? 2 : 1;
+        // If facing left, flip horizontally by applying scaleX(-1). We
+        // append the scaling factor afterwards so that the dog can both
+        // grow and flip correctly.  Without flipping the dog appears to
+        // always face right.
+        if (facingLeft) {
+          dog.style.transform = `scaleX(-1) scale(${scaleFactor})`;
+        } else {
+          dog.style.transform = `scale(${scaleFactor})`;
+        }
+      }
+
+      /**
+       * Start the run animation. When active, this interval toggles the
+       * dog's image between the idle and running sprites every 200ms to
+       * simulate walking or running. If the animation is already running
+       * the call has no effect.
+       */
+      function startRunAnimation() {
+        if (runAnimationInterval) return;
+        runAnimationInterval = setInterval(() => {
+          // Toggle between running and idle images
+          if (dog.src.includes(runSrc)) {
+            dog.src = idleSrc;
+          } else {
+            dog.src = runSrc;
+          }
+        }, 200);
+      }
+
+      /**
+       * Stop the run animation. Clears the interval and resets the dog's
+       * image to the idle sprite. If no animation is active, this is a
+       * no‑op.
+       */
+      function stopRunAnimation() {
+        if (!runAnimationInterval) return;
+        clearInterval(runAnimationInterval);
+        runAnimationInterval = null;
+        dog.src = idleSrc;
+      }
+
+      // When the dog collides with a mud puddle it becomes muddy. Increase
+      // the dog's scale and jump height. If the dog is already muddy this
+      // does nothing. The mud puddle obstacle will be removed by the caller.
+      function getMuddy() {
+        if (!isMuddy) {
+          isMuddy = true;
+          currentJumpHeight = mudJumpHeight;
+          // Update the transform so the dog grows while preserving facing
+          updateDogTransform();
+        }
+      }
+
+      // When the dog collides with a water obstacle. If it is muddy it
+      // shrinks back to normal size and can continue. Otherwise the game
+      // ends. The caller is responsible for removing the obstacle on
+      // collision.
+      function hitWater() {
+        if (isMuddy) {
+          isMuddy = false;
+          currentJumpHeight = normalJumpHeight;
+          // Update transform so the dog shrinks back to normal size but keeps
+          // its facing direction
+          updateDogTransform();
+        } else {
+          endGame();
+        }
+      }
+
       function jump() {
         if (isJumping) return;
         isJumping = true;
@@ -338,11 +564,12 @@
         jumpSound.currentTime = 0;
         jumpSound.play();
         const start = Date.now();
-        // Always start jumping from the ground level to avoid drift.  Using a
+        // Always start jumping from the ground level to avoid drift. Using a
         // constant starting bottom ensures repeated jumps don’t cause the dog
         // to gradually float upwards.
         const startBottom = ground;
-        const jumpHeight = 150;
+        // Use the current jump height which may be increased when muddy.
+        const jumpHeight = currentJumpHeight;
         const duration = 700;
         function animate() {
           const elapsed = Date.now() - start;
