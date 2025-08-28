@@ -825,8 +825,23 @@
           updateHorizontalVelocity();
         }
       });
-      gameArea.addEventListener('click', () => jump());
-      gameArea.addEventListener('touchstart', () => jump(), {passive: true});
+      // Allow clicking to trigger a jump only when the game is running and the
+      // instruction overlay has been dismissed. Without this guard, clicks on
+      // the instruction overlay could be intercepted by the game area,
+      // preventing the Start button from working on touch devices. When the
+      // game is not running or the instruction overlay is visible, clicks
+      // should be handled by the UI elements (e.g., Start button) instead of
+      // triggering a jump.
+      gameArea.addEventListener('click', (e) => {
+        if (!gameRunning || instructionOverlay.style.display !== 'none') {
+          return;
+        }
+        jump();
+      });
+
+      // Do not attach a separate touchstart listener here because handleTouchStart
+      // manages touch-based jumping and movement. Adding another listener would
+      // cause duplicate jumps and interfere with the Start button on mobile.
 
       restartBtn.addEventListener('click', () => {
         overlay.style.display = 'none';
