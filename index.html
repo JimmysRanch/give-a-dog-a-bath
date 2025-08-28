@@ -186,6 +186,16 @@
       // always start and end its jump at this baseline.
       const ground = 10;
 
+      // Minimum vertical clearance (in pixels) needed for the dog to safely clear
+      // an obstacle. If the dog's bottom position is below this value, then
+      // collision checks will be performed. Otherwise, collisions are ignored
+      // during the jump. This helps prevent premature collisions when the
+      // dog is still a fair distance above an obstacle. You may adjust
+      // this value to fine‑tune how high the dog must jump to clear
+      // different obstacles. A value around 80px works well with the
+      // current obstacle heights (50–120px).
+      const jumpClearance = 80;
+
       // Movement state for left and right arrow keys. We track whether
       // each arrow key is currently pressed so we can determine the
       // dog's horizontal velocity. This allows for smooth transitions
@@ -278,10 +288,17 @@
             obstacles.splice(i, 1);
             continue;
           }
-          // Collision detection
-          if (isColliding(dog, ob)) {
-            endGame();
-            return;
+          // Collision detection: Only perform a collision check when the dog
+          // is on or near the ground (i.e., its bottom position is below
+          // the jumpClearance threshold). This prevents premature
+          // collisions while the dog is mid‑air. When the dog jumps high
+          // enough (bottom > jumpClearance), collisions are ignored.
+          const dogBottomVal = parseFloat(dog.style.bottom);
+          if (dogBottomVal < jumpClearance) {
+            if (isColliding(dog, ob)) {
+              endGame();
+              return;
+            }
           }
         }
         // Spawn a new obstacle if enough distance has been travelled
