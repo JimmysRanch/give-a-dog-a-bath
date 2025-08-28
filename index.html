@@ -172,6 +172,11 @@
       let gameRunning = false;
       let isJumping = false;
       let lastTime = 0;
+      // Define the ground level for the dog (in pixels). Using a constant
+      // ground value prevents the dog from gradually floating upwards if
+      // multiple jumps are triggered in quick succession. The dog will
+      // always start and end its jump at this baseline.
+      const ground = 10;
 
       function startGame() {
         // reset game
@@ -184,8 +189,8 @@
         scoreEl.textContent = 'Score: 0';
         gameRunning = true;
         overlay.style.display = 'none';
-        // Reset dog position
-        dog.style.bottom = '10px';
+        // Reset dog position to the ground level
+        dog.style.bottom = ground + 'px';
         // Start loop
         lastTime = performance.now();
         requestAnimationFrame(update);
@@ -272,7 +277,10 @@
         jumpSound.currentTime = 0;
         jumpSound.play();
         const start = Date.now();
-        const startBottom = parseFloat(window.getComputedStyle(dog).bottom);
+        // Always start jumping from the ground level to avoid drift.  Using a
+        // constant starting bottom ensures repeated jumps don’t cause the dog
+        // to gradually float upwards.
+        const startBottom = ground;
         const jumpHeight = 150;
         const duration = 700;
         function animate() {
@@ -283,15 +291,16 @@
           } else if (elapsed < duration) {
             const progress = (elapsed - duration / 2) / (duration / 2);
             dog.style.bottom = startBottom + jumpHeight * (1 - progress) + 'px';
-          } else {
-            dog.style.bottom = startBottom + 'px';
-            isJumping = false;
-            return;
+              } else {
+                // Ensure the dog returns to the ground level at the end of the jump
+                dog.style.bottom = ground + 'px';
+                isJumping = false;
+                return;
+              }
+              requestAnimationFrame(animate);
+            }
+            animate();
           }
-          requestAnimationFrame(animate);
-        }
-        animate();
-      }
 
       function endGame() {
         gameRunning = false;
